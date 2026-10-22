@@ -98,15 +98,15 @@ ieee80211_send_eapol_key(struct ieee80211com *ic, mbuf_t m,
     EAPOL_KEY_DESC_IEEE80211 : EAPOL_KEY_DESC_WPA;
     
     info = BE_READ_2(key->info);
-    /* use V3 descriptor if KDF is SHA256-based */
-    if (ieee80211_is_sha256_akm((enum ieee80211_akm)ni->ni_rsnakms))
-        info |= EAPOL_KEY_DESC_V3;
-    /* use V2 descriptor if pairwise or group cipher is CCMP */
-    else if (ni->ni_rsncipher == IEEE80211_CIPHER_CCMP ||
-             ni->ni_rsngroupcipher == IEEE80211_CIPHER_CCMP)
-        info |= EAPOL_KEY_DESC_V2;
-    else
-        info |= EAPOL_KEY_DESC_V1;
+    int descriptor = ieee80211_eapol_key_version(
+        (enum ieee80211_akm)ni->ni_rsnakms, ni->ni_rsncipher,
+        ni->ni_rsngroupcipher);
+    if (descriptor < 0 || (ni->ni_rsnakms == IEEE80211_AKM_SAE &&
+        ni->ni_rsnprotos != IEEE80211_PROTO_RSN)) {
+        mbuf_freem(m);
+        return EOPNOTSUPP;
+    }
+    info = (info & ~EAPOL_KEY_VERSION_MASK) | descriptor;
     BE_WRITE_2(key->info, info);
     
     len = mbuf_len(m) - sizeof(struct ether_header);

@@ -101,6 +101,45 @@ ieee80211_is_sha256_akm(enum ieee80211_akm akm)
 	    akm == IEEE80211_AKM_SHA256_PSK;
 }
 
+/* SAE uses the SHA-256 PTK KDF, but not the SHA256-PSK descriptor (v3).
+ * FT-SAE has a separate FT key hierarchy and is intentionally not included. */
+static __inline int
+ieee80211_uses_sha256_ptk(enum ieee80211_akm akm)
+{
+    return ieee80211_is_sha256_akm(akm) || akm == IEEE80211_AKM_SAE;
+}
+
+static __inline int
+ieee80211_eapol_key_version(enum ieee80211_akm akm,
+    enum ieee80211_cipher pairwise, enum ieee80211_cipher group)
+{
+    if ((akm & (IEEE80211_AKM_SAE | IEEE80211_AKM_FT_SAE)) &&
+        akm != IEEE80211_AKM_SAE)
+        return -1; /* Reject FT-SAE and an unselected mixed AKM mask. */
+    if (akm == IEEE80211_AKM_SAE)
+        return (pairwise == IEEE80211_CIPHER_CCMP &&
+            group == IEEE80211_CIPHER_CCMP) ? 0 : -1;
+    if (ieee80211_is_sha256_akm(akm))
+        return 3;
+    return (pairwise == IEEE80211_CIPHER_CCMP ||
+        group == IEEE80211_CIPHER_CCMP) ? 2 : 1;
+}
+
+static __inline int
+ieee80211_eapol_key_version_valid(enum ieee80211_akm akm,
+    enum ieee80211_cipher pairwise, enum ieee80211_cipher group, unsigned desc)
+{
+    int expected = ieee80211_eapol_key_version(akm, pairwise, group);
+    if (expected < 0)
+        return 0;
+    if (akm == IEEE80211_AKM_SAE)
+        return desc == 0;
+    if (desc < 1 || desc > 3)
+        return 0;
+    /* Preserve the pre-existing non-SHA256/TKIP acceptance policy. */
+    return expected == 1 || desc == (unsigned)expected;
+}
+
 struct ieee80211_key {
 	u_int8_t		k_id;		/* identifier (0-5) */
 	enum ieee80211_cipher	k_cipher;

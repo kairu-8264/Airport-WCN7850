@@ -422,9 +422,15 @@ ieee80211_derive_ptk(enum ieee80211_akm akm, const u_int8_t *pmk,
     memcpy(&buf[12], ret ? anonce : snonce, EAPOL_KEY_NONCE_LEN);
     memcpy(&buf[44], ret ? snonce : anonce, EAPOL_KEY_NONCE_LEN);
 
-    kdf = ieee80211_is_sha256_akm(akm) ? ieee80211_kdf : ieee80211_prf;
-    (*kdf)(pmk, IEEE80211_PMK_LEN, (const u_int8_t *)"Pairwise key expansion", 23,
-        buf, sizeof buf, (u_int8_t *)ptk, sizeof(*ptk));
+    kdf = ieee80211_uses_sha256_ptk(akm) ? ieee80211_kdf : ieee80211_prf;
+    /* SAE/CCMP-128: KCK(16) + KEK(16) + TK(16). The KDF length is
+     * part of its input, so deriving the old 64-byte TKIP layout is wrong. */
+    size_t ptk_len = akm == IEEE80211_AKM_SAE ? 48 : sizeof(*ptk);
+    if (akm == IEEE80211_AKM_SAE)
+        explicit_bzero(ptk, sizeof(*ptk));
+    size_t label_len = akm == IEEE80211_AKM_SAE ? 22 : 23;
+    (*kdf)(pmk, IEEE80211_PMK_LEN, (const u_int8_t *)"Pairwise key expansion", label_len,
+        buf, sizeof buf, (u_int8_t *)ptk, ptk_len);
 }
 
 static void
@@ -506,6 +512,7 @@ ieee80211_eapol_key_mic(struct ieee80211_eapol_key *key, const u_int8_t *kck)
         /* truncate HMAC-SHA1 to its 128 MSBs */
         memcpy(key->mic, digest, EAPOL_KEY_MIC_LEN);
         break;
+    case EAPOL_KEY_DESC_AKM: /* SAE: AES-128-CMAC, not HMAC-SHA256 */
     case EAPOL_KEY_DESC_V3:
         AES_CMAC_Init(&ctx.cmac);
         AES_CMAC_SetKey(&ctx.cmac, kck);
@@ -571,6 +578,7 @@ ieee80211_eapol_key_encrypt(struct ieee80211com *ic,
         rc4_skip(&ctx.rc4, RC4STATE);
         rc4_crypt(&ctx.rc4, data, data, len);
         break;
+    case EAPOL_KEY_DESC_AKM: /* SAE uses AES Key Wrap */
     case EAPOL_KEY_DESC_V2:
     case EAPOL_KEY_DESC_V3:
         if (len < 16 || (len & 7) != 0) {
@@ -624,6 +632,7 @@ ieee80211_eapol_key_decrypt(struct ieee80211_eapol_key *key,
         rc4_skip(&ctx.rc4, RC4STATE);
         rc4_crypt(&ctx.rc4, data, data, len);
         return 0;
+    case EAPOL_KEY_DESC_AKM: /* SAE uses AES Key Wrap */
     case EAPOL_KEY_DESC_V2:
     case EAPOL_KEY_DESC_V3:
         /* Key Data Length must be a multiple of 8 */

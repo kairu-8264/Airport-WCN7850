@@ -2,7 +2,7 @@ name: Build AirportWCN7850 kext
 
 on:
   push:
-    branches: [main]
+    branches: [main, sae-key-exchange]
   workflow_dispatch:
 
 permissions:
@@ -28,6 +28,8 @@ jobs:
           git rev-parse HEAD
       - name: Test SAE milestone boundaries
         run: python3 scripts/test-sae-milestone.py --cxx "$(xcrun --find clang++)" 2>&1 | tee tests.log
+      - name: Test SAE key exchange and WPA2 regression vectors
+        run: python3 scripts/test-sae-key-exchange.py --cxx "$(xcrun --find clang++)" 2>&1 | tee key-exchange-tests.log
       - name: Fetch and verify firmware
         run: bash scripts/fetch-firmware.sh 2>&1 | tee firmware.log
       - name: Build x86_64 kext
@@ -45,6 +47,7 @@ jobs:
           git rev-parse HEAD > dist/SOURCE_COMMIT.txt
           git -C deps/MacKernelSDK rev-parse HEAD > dist/MACKERNELSDK_COMMIT.txt
           cp docs/sae-milestone.md dist/SAE-implementation-report.md
+          cp docs/sae-key-exchange.md dist/SAE-key-exchange-development.md
           cp firmware/dl/LICENSE.QualcommAtheros_ath10k dist/
           ditto -c -k --sequesterRsrc --keepParent "$kext" "dist/AirportWCN7850-SAE-milestone-${GITHUB_SHA:0:7}.zip"
           shasum -a 256 "$binary" > dist/BINARY_SHA256SUMS

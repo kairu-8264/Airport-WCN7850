@@ -855,7 +855,8 @@ qwz_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 
 	if (test_bit(ATH12K_FLAG_HW_CRYPTO_DISABLED, sc->sc_flags) ||
 	    k->k_cipher == IEEE80211_CIPHER_WEP40 ||
-	    k->k_cipher == IEEE80211_CIPHER_WEP104)
+	    k->k_cipher == IEEE80211_CIPHER_WEP104 ||
+	    k->k_cipher == IEEE80211_CIPHER_BIP)
 		return ieee80211_set_key(ic, ni, k);
 
 	return qwz_queue_setkey_cmd(ic, ni, k, QWZ_ADD_KEY);
@@ -869,7 +870,8 @@ qwz_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 
 	if (test_bit(ATH12K_FLAG_HW_CRYPTO_DISABLED, sc->sc_flags) ||
 	    k->k_cipher == IEEE80211_CIPHER_WEP40 ||
-	    k->k_cipher == IEEE80211_CIPHER_WEP104) {
+	    k->k_cipher == IEEE80211_CIPHER_WEP104 ||
+	    k->k_cipher == IEEE80211_CIPHER_BIP) {
 		ieee80211_delete_key(ic, ni, k);
 		return;
 	}

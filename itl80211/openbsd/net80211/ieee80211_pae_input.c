@@ -138,20 +138,17 @@ ieee80211_eapol_key_input(struct ieee80211com *ic, mbuf_t m,
     
     info = BE_READ_2(key->info);
     
-    /* discard EAPOL-Key frames with an unknown descriptor version */
+    /* SAE descriptor 0 is AKM-defined, not a weaker WPA2 descriptor.
+     * Its key data still uses AES Key Wrap and its MIC is AES-CMAC. */
     desc = info & EAPOL_KEY_VERSION_MASK;
-    if (desc < EAPOL_KEY_DESC_V1 || desc > EAPOL_KEY_DESC_V3)
+    if (ni->ni_rsnakms == IEEE80211_AKM_SAE &&
+        ni->ni_rsnprotos != IEEE80211_PROTO_RSN)
         goto done;
-    
-    if (ieee80211_is_sha256_akm((enum ieee80211_akm)ni->ni_rsnakms)) {
-        if (desc != EAPOL_KEY_DESC_V3)
-            goto done;
-    } else if (ni->ni_rsncipher == IEEE80211_CIPHER_CCMP ||
-               ni->ni_rsngroupcipher == IEEE80211_CIPHER_CCMP) {
-        if (desc != EAPOL_KEY_DESC_V2)
-            goto done;
-    }
-    
+    if (!ieee80211_eapol_key_version_valid(
+        (enum ieee80211_akm)ni->ni_rsnakms, ni->ni_rsncipher,
+        ni->ni_rsngroupcipher, desc))
+        goto done;
+
     /* make sure the key data field is contiguous */
     if (mbuf_len(m) < totlen && mbuf_pullup(&m, totlen)) {
         ic->ic_stats.is_rx_nombuf++;

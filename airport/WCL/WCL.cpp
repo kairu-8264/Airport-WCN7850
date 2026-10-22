@@ -378,6 +378,17 @@ IOReturn AirportItlwmSkywalkInterface::beginWCLJoin(apple80211AssocCandidates *r
 {
     AirportWCL::JoinRequest join;
     if (!AirportWCL::decodeJoin(request, 0x2cc, join)) {
+        // Inspect fixed metadata only, never the password/PMK bytes. This also
+        // identifies native SAE requests rejected by the current 32-byte ABI.
+        if (request) {
+            const auto p = reinterpret_cast<const uint8_t *>(request);
+            uint32_t upper = AirportWCL::read32(p + 0x14);
+            if (upper & (APPLE80211_AUTHTYPE_WPA3_SAE |
+                         APPLE80211_AUTHTYPE_WPA3_FT_SAE))
+                XYLog("WCL SAE request rejected by decoder: lower=%u upper=0x%x key_len=%u key_cipher=%u\n",
+                      AirportWCL::read32(p + 0x10), upper,
+                      AirportWCL::read32(p + 0x44), AirportWCL::read32(p + 0x48));
+        }
         return kIOReturnBadArgument;
     }
     return startWCLJoin(join);
@@ -389,7 +400,9 @@ IOReturn AirportItlwmSkywalkInterface::startWCLJoin(AirportWCL::JoinRequest &joi
     // Refuse even combined PSK/SAE requests before deferring or leaving a BSS.
     if (join.upperAuth & (APPLE80211_AUTHTYPE_WPA3_SAE |
                           APPLE80211_AUTHTYPE_WPA3_FT_SAE)) {
-        XYLog("WCL join: SAE authentication is not implemented\n");
+        XYLog("WCL SAE request: lower=%u upper=0x%x key_len=%u key_cipher=%u rsn_len=%u; authenticator unavailable\n",
+              join.lowerAuth, join.upperAuth, join.keyLength, join.keyCipher,
+              join.rsnLength);
         explicit_bzero(&join, sizeof(join));
         return kIOReturnUnsupported;
     }
