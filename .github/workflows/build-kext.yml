@@ -12,6 +12,9 @@ jobs:
   build:
     runs-on: macos-15-intel
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     env:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
@@ -36,7 +39,7 @@ jobs:
           kext=build/AirportWCN7850.kext
           binary="$kext/Contents/MacOS/AirportWCN7850"
           file "$binary"
-          lipo -verify_arch x86_64 "$binary"
+          lipo "$binary" -verify_arch x86_64
           plutil -lint "$kext/Contents/Info.plist"
           python3 -c 'import struct; p="build/AirportWCN7850.kext/Contents/MacOS/AirportWCN7850"; h=struct.unpack("<8I",open(p,"rb").read(32)); assert h[0]==0xfeedfacf and h[1]==0x01000007 and h[3]==11, h'
           git rev-parse HEAD > dist/SOURCE_COMMIT.txt

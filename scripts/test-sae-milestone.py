@@ -9,6 +9,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -169,6 +170,11 @@ int main() {
         else:
             command = [cxx, '-std=c++14', '-Wall', '-Wextra', '-Werror', '-I', str(ROOT),
                        str(path / 'test.cpp'), '-o', str(exe)]
+        if sys.platform == 'darwin':
+            # Calling the clang++ binary directly bypasses xcrun SDK selection.
+            sdk = subprocess.check_output(
+                ['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
+            command += ['-isysroot', sdk]
         subprocess.run(command, check=True, cwd=path)
         subprocess.run([str(exe)], check=True)
 
