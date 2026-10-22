@@ -385,6 +385,14 @@ IOReturn AirportItlwmSkywalkInterface::beginWCLJoin(apple80211AssocCandidates *r
 
 IOReturn AirportItlwmSkywalkInterface::startWCLJoin(AirportWCL::JoinRequest &join)
 {
+    // Recognition of SAE in scan results is not authentication support.
+    // Refuse even combined PSK/SAE requests before deferring or leaving a BSS.
+    if (join.upperAuth & (APPLE80211_AUTHTYPE_WPA3_SAE |
+                          APPLE80211_AUTHTYPE_WPA3_FT_SAE)) {
+        XYLog("WCL join: SAE authentication is not implemented\n");
+        explicit_bzero(&join, sizeof(join));
+        return kIOReturnUnsupported;
+    }
     auto auth = AirportWCL::classifyLegacyAuth(join);
     XYLog("WCL join ssid_len=%u bssid=%s chanspec=0x%x auth lower=%u upper=0x%x -> %s, key len=%u type=%u%s, rsn_ie len=%u\n",
           join.ssidLength, ether_sprintf(join.bssid), join.channelSpec, join.lowerAuth, join.upperAuth,

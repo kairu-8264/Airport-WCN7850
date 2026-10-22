@@ -1477,6 +1477,10 @@ ieee80211_parse_rsn_akm(const u_int8_t selector[4])
                 return IEEE80211_AKM_SHA256_8021X;
             case 6:    /* PSK with SHA256 KDF */
                 return IEEE80211_AKM_SHA256_PSK;
+            case 8:    /* SAE: recognize in scans, do not enable locally */
+                return IEEE80211_AKM_SAE;
+            case 9:    /* FT-SAE: recognize only */
+                return IEEE80211_AKM_FT_SAE;
         }
     }
     return IEEE80211_AKM_NONE;    /* ignore unknown AKMs */

@@ -1026,6 +1026,9 @@ getCARD_CAPABILITIES(OSObject *object,
 
     cd->version = APPLE80211_VERSION;
 #ifdef AIRPORT_WCL
+    // Keep SAE/FT-SAE and PMF capabilities unadvertised. Recognizing an AP's
+    // SAE AKM does not supply SAE authentication, PMK derivation or tested PMF.
+    // The structure was zeroed above; do not infer these bits from C_RSN.
     // WPA2 can use TKIP for group traffic even when unicast uses CCMP.
     // net80211 handles TKIP/MIC in software; hiding it makes Apple80211
     // reject these networks before it submits an association request.

@@ -105,6 +105,12 @@ static int ieeeChanFlag2apple(int flags, int bw)
 
 void AirportItlwmSkywalkInterface::associateSSID(uint8_t *ssid, uint32_t ssid_len, const struct ether_addr &bssid, uint32_t authtype_lower, uint32_t authtype_upper, uint8_t *key, uint32_t key_len, int key_index)
 {
+    // SAE needs its own authentication exchange and PMK; a WPA2 PSK is not it.
+    if (authtype_upper & (APPLE80211_AUTHTYPE_WPA3_SAE |
+                         APPLE80211_AUTHTYPE_WPA3_FT_SAE)) {
+        XYLog("%s: SAE authentication is not implemented\n", __FUNCTION__);
+        return;
+    }
     struct ieee80211com *ic = fHalService->get80211Controller();
     
     ieee80211_disable_rsn(ic);
@@ -133,12 +139,6 @@ void AirportItlwmSkywalkInterface::associateSSID(uint8_t *ssid, uint32_t ssid_le
     }
 
 #ifndef AIRPORT_WCL
-    // AUTHTYPE_WPA3_SAE AUTHTYPE_WPA3_FT_SAE
-    // we don't really support WPA3, but we have announced we support WPA3 in card capability function. so we fake it as WPA2 to support some WPA2/WPA3 mix wifi connection.
-    if (authtype_upper == APPLE80211_AUTHTYPE_WPA3_SAE || authtype_upper == APPLE80211_AUTHTYPE_WPA3_FT_SAE) {
-        wpa.i_protos |= IEEE80211_WPA_PROTO_WPA2;
-        authtype_upper |= APPLE80211_AUTHTYPE_WPA2_PSK;// hack
-    }
     // AUTHTYPE_WPA3_ENTERPRISE AUTHTYPE_WPA3_FT_ENTERPRISE
     if (authtype_upper == APPLE80211_AUTHTYPE_WPA3_ENTERPRISE || authtype_upper == APPLE80211_AUTHTYPE_WPA3_FT_ENTERPRISE) {
         wpa.i_protos |= IEEE80211_WPA_PROTO_WPA2;
@@ -830,6 +830,13 @@ getNSS(struct apple80211_nss_data *data)
 IOReturn AirportItlwmSkywalkInterface::
 setASSOCIATE(struct apple80211_assoc_data *ad)
 {
+    if (!ad)
+        return kIOReturnError;
+    // Reject before changing auth/RSN state, including combined PSK/SAE requests.
+    // A transition AP remains usable when the caller explicitly requests WPA2.
+    if (ad->ad_auth_upper & (APPLE80211_AUTHTYPE_WPA3_SAE |
+                             APPLE80211_AUTHTYPE_WPA3_FT_SAE))
+        return kIOReturnUnsupported;
     XYLog("%s [%s] mode=%d ad_auth_lower=%d ad_auth_upper=%d rsn_ie_len=%d%s%s%s%s%s%s%s\n", __FUNCTION__, ad->ad_ssid, ad->ad_mode, ad->ad_auth_lower, ad->ad_auth_upper, ad->ad_rsn_ie_len,
           (ad->ad_flags & 2) ? ", Instant Hotspot" : "",
           (ad->ad_flags & 4) ? ", Auto Instant Hotspot" : "",
@@ -843,9 +850,6 @@ setASSOCIATE(struct apple80211_assoc_data *ad)
     struct apple80211_authtype_data auth_type_data;
     struct ieee80211com *ic = fHalService->get80211Controller();
 
-    if (!ad)
-        return kIOReturnError;
-    
     if (ic->ic_state < IEEE80211_S_SCAN)
         return kIOReturnSuccess;
     

@@ -1,0 +1,65 @@
+name: Build AirportWCN7850 kext
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Record build environment
+        run: |
+          sw_vers
+          uname -m
+          xcrun clang++ --version
+          git rev-parse HEAD
+      - name: Test SAE milestone boundaries
+        run: python3 scripts/test-sae-milestone.py --cxx "$(xcrun --find clang++)" 2>&1 | tee tests.log
+      - name: Fetch and verify firmware
+        run: bash scripts/fetch-firmware.sh 2>&1 | tee firmware.log
+      - name: Build x86_64 kext
+        run: PRODUCT=AirportWCN7850 bash build.sh 2>&1 | tee build.log
+      - name: Verify and package kext
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          kext=build/AirportWCN7850.kext
+          binary="$kext/Contents/MacOS/AirportWCN7850"
+          file "$binary"
+          lipo -verify_arch x86_64 "$binary"
+          plutil -lint "$kext/Contents/Info.plist"
+          python3 -c 'import struct; p="build/AirportWCN7850.kext/Contents/MacOS/AirportWCN7850"; h=struct.unpack("<8I",open(p,"rb").read(32)); assert h[0]==0xfeedfacf and h[1]==0x01000007 and h[3]==11, h'
+          git rev-parse HEAD > dist/SOURCE_COMMIT.txt
+          git -C deps/MacKernelSDK rev-parse HEAD > dist/MACKERNELSDK_COMMIT.txt
+          cp docs/sae-milestone.md dist/SAE-implementation-report.md
+          cp firmware/dl/LICENSE.QualcommAtheros_ath10k dist/
+          ditto -c -k --sequesterRsrc --keepParent "$kext" "dist/AirportWCN7850-SAE-milestone-${GITHUB_SHA:0:7}.zip"
+          shasum -a 256 "$binary" > dist/BINARY_SHA256SUMS
+          (cd dist && shasum -a 256 *.zip > SHA256SUMS)
+      - name: Upload kext and provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: AirportWCN7850-SAE-milestone-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-logs-${{ github.sha }}
+          path: |
+            *.log
+            build/**/*.log
+          if-no-files-found: warn
+          retention-days: 14
