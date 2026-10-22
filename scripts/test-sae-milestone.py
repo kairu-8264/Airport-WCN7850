@@ -162,13 +162,15 @@ int main() {
         path = pathlib.Path(folder)
         (path / 'test.cpp').write_text(source, encoding='utf-8')
         exe = path / 'test.exe'
+        # The extracted harness is self-contained. A project -I path lets VERSION
+        # shadow libc++ <version> on case-insensitive macOS filesystems.
         if pathlib.Path(cxx).name.lower() in ('cl', 'cl.exe'):
             # Existing WCL IE-length byte update is bounded by its RSN checks.
             # MSVC warns on its size_t subtraction; keep other warnings fatal.
             command = [cxx, '/nologo', '/std:c++14', '/W3', '/WX', '/wd4267', '/EHsc',
-                       '/I' + str(ROOT), str(path / 'test.cpp'), '/Fe:' + str(exe)]
+                       str(path / 'test.cpp'), '/Fe:' + str(exe)]
         else:
-            command = [cxx, '-std=c++14', '-Wall', '-Wextra', '-Werror', '-I', str(ROOT),
+            command = [cxx, '-std=c++14', '-Wall', '-Wextra', '-Werror',
                        str(path / 'test.cpp'), '-o', str(exe)]
         if sys.platform == 'darwin':
             # Calling the clang++ binary directly bypasses xcrun SDK selection.
